@@ -1,6 +1,7 @@
 local _ = require("gettext")
 local ButtonDialog = require("ui/widget/buttondialog")
 local InfoMessage = require("ui/widget/infomessage")
+local logger = require("logger")
 local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
@@ -11,39 +12,10 @@ local KoAbs = WidgetContainer:extend({
 	is_doc_only = false,
 })
 
--- Temporary mock data.
-local books = {
-	["1"] = {
-		{
-			title = "The Left Hand of Darkness",
-			author = "Ursula K. Le Guin",
-		},
-		{
-			title = "The Dispossessed",
-			author = "Ursula K. Le Guin",
-		},
-		{
-			title = "Solaris",
-			author = "Stanisław Lem",
-		},
-	},
-	["2"] = {
-		{
-			title = "Watchmen",
-			author = "Alan Moore",
-		},
-	},
-	["3"] = {
-		{
-			title = "A Brief History of Time",
-			author = "Stephen Hawking",
-		},
-	},
-}
-
 function KoAbs:init()
 	self.ui.menu:registerToMainMenu(self)
 	self.libraries = {}
+	self.items = {}
 end
 
 function KoAbs:addToMainMenu(menu_items)
@@ -58,24 +30,40 @@ end
 
 function KoAbs:showBrowser()
 	-- TODO remove
-	local config = {}
+	local config = { server_url = "https://your-abs-server.example.com" }
 	local client = abs_client:new(config)
-	local token, user_id, error = client:login()
-	if error then
+
+	local token, user_id, err = client:login("YOUR_USERNAME", "YOUR_PASSWORD")
+	if err then
 		UIManager:show(InfoMessage:new({
-			text = _("Login error: ") .. error,
+			text = _("Login error: ") .. err,
 		}))
 		return
 	end
-	local libraries, error = client:getLibraries()
-	if error then
+
+	local libraries, err = client:getLibraries()
+	if err then
 		UIManager:show(InfoMessage:new({
-			text = _("Error getting libraries: ") .. error,
+			text = _("Error getting libraries: ") .. err,
 		}))
 		return
 	end
+
 	self.libraries = libraries
 	self.selected_library = self.selected_library or self.libraries[1]
+
+	local items, err = client:getLibraryItems(self.selected_library.id)
+	if err then
+		UIManager:show(InfoMessage:new({
+			text = _("Error getting library items: ") .. err,
+		}))
+		return
+	end
+
+	logger.info("KO-ABS: library items response:", items)
+
+	self.items = items
+
 	self:renderBrowser()
 end
 
@@ -90,14 +78,14 @@ function KoAbs:renderBrowser()
 		end,
 	})
 
-	for i, book in ipairs(books[library.id] or {}) do
+	for i, book in ipairs(self.items.results or {}) do
 		local selected_book = book
 
 		table.insert(items, {
-			text = _(selected_book.title) .. "\n" .. _(selected_book.author),
+			text = _(selected_book.media.metadata.title) .. "\n" .. _(selected_book.media.metadata.authorName),
 			callback = function()
 				UIManager:show(InfoMessage:new({
-					_(selected_book.title) .. "\n" .. _(selected_book.author),
+					_(selected_book.media.metadata.title) .. "\n" .. _(selected_book.media.metadata.authorName),
 				}))
 			end,
 		})

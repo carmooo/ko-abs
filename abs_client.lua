@@ -138,4 +138,18 @@ function ABSClient:getLibraries()
 	return data.libraries, nil
 end
 
+function ABSClient:getLibraryItems(library_id, limit, page)
+	limit = limit or 10
+	page = page or 0
+	local endpoint =
+		string.format("/api/libraries/%s/items?limit=%d&page=%d&sort=media.metadata.title", library_id, limit, page)
+	local data, err = self:_request(endpoint, "GET")
+
+	if err or not data then
+		return nil, err
+	end
+
+	return data, nil
+end
+
 return ABSClient
