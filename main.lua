@@ -20,13 +20,11 @@ local KoAbs = WidgetContainer:extend({
 
 function KoAbs:init()
 	self.ui.menu:registerToMainMenu(self)
-	self.libraries = {}
-	self.items = {}
 end
 
 function KoAbs:addToMainMenu(menu_items)
 	menu_items.ko_abs = {
-		text = _("AudioBookShelf"),
+		text = "AudioBookShelf",
 		sorting_hint = "tools",
 		callback = function()
 			self:showBrowser()
@@ -35,9 +33,9 @@ function KoAbs:addToMainMenu(menu_items)
 end
 
 function KoAbs:showBrowser()
-	-- TODO remove
 	local config = { server_url = server_config.server_url }
 	local client = abs_client:new(config)
+	self.client = client
 
 	local token, user_id, err = client:login(server_config.username, server_config.password)
 	if err then
@@ -55,13 +53,20 @@ function KoAbs:showBrowser()
 		return
 	end
 
+	if not libraries or #libraries < 1 then
+		UIManager:show(InfoMessage:new({
+			text = _("No libraries found."),
+		}))
+		return
+	end
+
 	self.libraries = libraries
 	self.selected_library = self.selected_library or self.libraries[1]
 
-	self:renderBrowser(client)
+	self:renderBrowser()
 end
 
-function KoAbs:renderBrowser(client)
+function KoAbs:renderBrowser()
 	local library = self.selected_library
 	local items = {}
 
@@ -72,7 +77,7 @@ function KoAbs:renderBrowser(client)
 		end,
 	})
 
-	local items, err = client:getLibraryItems(self.selected_library.id)
+	local books, err = self.client:getLibraryItems(self.selected_library.id)
 	if err then
 		UIManager:show(InfoMessage:new({
 			text = _("Error getting library items: ") .. err,
@@ -80,23 +85,24 @@ function KoAbs:renderBrowser(client)
 		return
 	end
 
-	self.items = items
-
-	for i, book in ipairs(self.items.results or {}) do
+	for i, book in ipairs(books.results or {}) do
 		local selected_book = book
+		local metadata = selected_book.media and selected_book.media.metadata or {}
+		local title = metadata.title or _("Untitled")
+		local author = metadata.authorName or _("Unknown author")
 
 		table.insert(items, {
-			text = _(selected_book.media.metadata.title) .. "\n" .. _(selected_book.media.metadata.authorName),
+			text = title .. "\n" .. _author,
 			callback = function()
 				UIManager:show(InfoMessage:new({
-					_(selected_book.media.metadata.title) .. "\n" .. _(selected_book.media.metadata.authorName),
+					title .. "\n" .. author,
 				}))
 			end,
 		})
 	end
 
 	self.browser_menu = Menu:new({
-		title = _("AudioBookShelf"),
+		title = "AudioBookShelf",
 		item_table = items,
 	})
 
@@ -112,14 +118,14 @@ function KoAbs:showLibraryPicker()
 
 		table.insert(buttons, {
 			{
-				text = _(selected_library.name),
+				text = selected_library.name,
 				callback = function()
-					UIManager.close(dialog)
+					UIManager:close(dialog)
 
 					self.selected_library = selected_library
 
 					if self.browser_menu then
-						UIManager.close(self.browser_menu)
+						UIManager:close(self.browser_menu)
 					end
 
 					self:renderBrowser()
