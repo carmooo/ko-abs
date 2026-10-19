@@ -1,4 +1,5 @@
 local _ = require("gettext")
+local ButtonDialog = require("ui/widget/buttondialog")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
@@ -96,6 +97,38 @@ function KoAbs:renderBrowser()
 	UIManager:show(self.browser_menu)
 end
 
-function KoAbs:showLibraryPicker() end
+function KoAbs:showLibraryPicker()
+	local dialog
+	local buttons = {}
+
+	for i, library in ipairs(libraries) do
+		local selected_library = library
+
+		table.insert(buttons, {
+			{
+				text = _(selected_library.name),
+				callback = function()
+					UIManager.close(dialog)
+
+					self.selected_library = selected_library
+
+					if self.browser_menu then
+						UIManager.close(self.browser_menu)
+					end
+
+					self:renderBrowser()
+				end,
+			},
+		})
+	end
+
+	dialog = ButtonDialog:new({
+		title = _("Select library"),
+		buttons = buttons,
+		shrink_unneeded_width = true,
+	})
+
+	UIManager:show(dialog)
+end
 
 return KoAbs
