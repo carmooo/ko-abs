@@ -152,4 +152,70 @@ function ABSClient:getLibraryItems(library_id, limit, page)
 	return data, nil
 end
 
+-- careful what dest_path you call this with as it will mkdir
+function ABSClient:downloadFile(id, dest_dir, dest_filename)
+	if not id or id == "" then
+		return _("No item id provided")
+	end
+
+	if not dest_dir or dest_dir == "" then
+		return _("Invalid destination dir.")
+	end
+
+	if not dest_filename or dest_filename == "" then
+		return _("Invalid destination filename.")
+	end
+
+	local url = "/api/items/" .. id .. "/download"
+
+	local headers = {
+		["User-Agent"] = "ko-abs/1.0",
+	}
+	if self.token and self.token ~= "" then
+		headers["Authorization"] = "Bearer " .. self.token
+	end
+
+	-- careful what you call this with
+	if dest_dir and dest_dir ~= "" then
+		os.execute(string.format('mkdir -p "%s"', dest_dir))
+	end
+
+	local f, err = io.open(dest_dir .. "/" .. dest_filename, "wb")
+	if err or not f then
+		return _("Cannot open destination file.")
+	end
+
+	socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_BLOCK_TIMEOUT)
+
+	local code, response_headers, status = socket.skip(
+		1,
+		http.request({
+			url = url,
+			method = "GET",
+			headers = headers,
+			sink = ltn12.sink.file(f),
+			redirect = false,
+		})
+	)
+
+	io.close(f)
+
+	socketutil:reset_timeout()
+
+	if not code then
+		return _("Network error: no response from server")
+	end
+
+	-- If the request fails, code is a string error message
+	if type(code) ~= "number" then
+		return _("Network error: ") .. tostring(code)
+	end
+
+	if code ~= 200 then
+		return _("Unexpected http response: ") .. tostring(code)
+	end
+
+	return nil
+end
+
 return ABSClient
