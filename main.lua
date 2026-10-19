@@ -4,6 +4,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local abs_client = require("abs_client")
 
 local KoAbs = WidgetContainer:extend({
 	name = "myplugin",
@@ -11,12 +12,6 @@ local KoAbs = WidgetContainer:extend({
 })
 
 -- Temporary mock data.
-local libraries = {
-	{ id = "1", name = "Ebooks" },
-	{ id = "2", name = "Comics" },
-	{ id = "3", name = "Reference" },
-}
-
 local books = {
 	["1"] = {
 		{
@@ -48,6 +43,7 @@ local books = {
 
 function KoAbs:init()
 	self.ui.menu:registerToMainMenu(self)
+	self.libraries = {}
 end
 
 function KoAbs:addToMainMenu(menu_items)
@@ -61,7 +57,25 @@ function KoAbs:addToMainMenu(menu_items)
 end
 
 function KoAbs:showBrowser()
-	self.selected_library = self.selected_library or libraries[1]
+	-- TODO remove
+	local config = {}
+	local client = abs_client:new(config)
+	local token, user_id, error = client:login()
+	if error then
+		UIManager:show(InfoMessage:new({
+			text = _("Login error: ") .. error,
+		}))
+		return
+	end
+	local libraries, error = client:getLibraries()
+	if error then
+		UIManager:show(InfoMessage:new({
+			text = _("Error getting libraries: ") .. error,
+		}))
+		return
+	end
+	self.libraries = libraries
+	self.selected_library = self.selected_library or self.libraries[1]
 	self:renderBrowser()
 end
 
@@ -101,7 +115,7 @@ function KoAbs:showLibraryPicker()
 	local dialog
 	local buttons = {}
 
-	for i, library in ipairs(libraries) do
+	for i, library in ipairs(self.libraries) do
 		local selected_library = library
 
 		table.insert(buttons, {

@@ -9,13 +9,19 @@ local http = require("socket.http")
 local logger = require("logger")
 local ltn12 = require("ltn12")
 local json = require("json")
-local skip = require("socket.skip")
+local socket = require("socket")
 local socketutil = require("socketutil")
 
 local ABSClient = {}
 
 function ABSClient:new(config)
 	config = config or {}
+	setmetatable(config, { __index = self })
+	config.server_url = config.server_url or ""
+	config.token = config.token or ""
+	config.user_id = config.user_id or ""
+
+	return config
 end
 
 function ABSClient:_request(endpoint, method, body)
@@ -46,7 +52,7 @@ function ABSClient:_request(endpoint, method, body)
 
 	socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_BLOCK_TIMEOUT)
 
-	local code, response_headers, status = skip(
+	local code, response_headers, status = socket.skip(
 		1,
 		http.request({
 			url = url,
@@ -84,3 +90,52 @@ function ABSClient:_request(endpoint, method, body)
 	end
 	return json_body, nil
 end
+
+function ABSClient:login(username, password)
+	if not username or username == "" then
+		return nil, nil, _("Username is required.")
+	end
+
+	if not password or password == "" then
+		return nil, nil, _("Password is required.")
+	end
+
+	local data, err = self:_request("/login", "POST", {
+		username = username,
+		password = password,
+	})
+
+	if err or not data then
+		return nil, nil, err
+	end
+
+	if data.error then
+		return nil, nil, data.error
+	end
+
+	local token = data.token or data.user and data.user.token
+	if not token then
+		return nil, nil, _("Login succeeded but no token was returned.")
+	end
+
+	self.token = token
+	self.user_id = data.user and data.user.id or ""
+
+	return self.token, self.user_id, nil
+end
+
+function ABSClient:getLibraries()
+	local data, err = self:_request("/api/libraries", "GET")
+
+	if err or not data then
+		return nil, err
+	end
+
+	if not data.libraries or type(data.libraries) ~= "table" then
+		return nil, _("No libraries array in the response.")
+	end
+
+	return data.libraries, nil
+end
+
+return ABSClient
