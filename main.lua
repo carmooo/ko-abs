@@ -7,8 +7,14 @@ local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local abs_client = require("abs_client")
 
+local ok, server_config = pcall(require, "config")
+
+if not ok then
+	server_config = {}
+end
+
 local KoAbs = WidgetContainer:extend({
-	name = "myplugin",
+	name = "ko-abs",
 	is_doc_only = false,
 })
 
@@ -20,7 +26,7 @@ end
 
 function KoAbs:addToMainMenu(menu_items)
 	menu_items.ko_abs = {
-		text = _("KO ABS"),
+		text = _("AudioBookShelf"),
 		sorting_hint = "tools",
 		callback = function()
 			self:showBrowser()
@@ -30,10 +36,10 @@ end
 
 function KoAbs:showBrowser()
 	-- TODO remove
-	local config = { server_url = "https://your-abs-server.example.com" }
+	local config = { server_url = server_config.server_url }
 	local client = abs_client:new(config)
 
-	local token, user_id, err = client:login("YOUR_USERNAME", "YOUR_PASSWORD")
+	local token, user_id, err = client:login(server_config.username, server_config.password)
 	if err then
 		UIManager:show(InfoMessage:new({
 			text = _("Login error: ") .. err,
@@ -52,22 +58,10 @@ function KoAbs:showBrowser()
 	self.libraries = libraries
 	self.selected_library = self.selected_library or self.libraries[1]
 
-	local items, err = client:getLibraryItems(self.selected_library.id)
-	if err then
-		UIManager:show(InfoMessage:new({
-			text = _("Error getting library items: ") .. err,
-		}))
-		return
-	end
-
-	logger.info("KO-ABS: library items response:", items)
-
-	self.items = items
-
-	self:renderBrowser()
+	self:renderBrowser(client)
 end
 
-function KoAbs:renderBrowser()
+function KoAbs:renderBrowser(client)
 	local library = self.selected_library
 	local items = {}
 
@@ -77,6 +71,16 @@ function KoAbs:renderBrowser()
 			self:showLibraryPicker()
 		end,
 	})
+
+	local items, err = client:getLibraryItems(self.selected_library.id)
+	if err then
+		UIManager:show(InfoMessage:new({
+			text = _("Error getting library items: ") .. err,
+		}))
+		return
+	end
+
+	self.items = items
 
 	for i, book in ipairs(self.items.results or {}) do
 		local selected_book = book
@@ -92,7 +96,7 @@ function KoAbs:renderBrowser()
 	end
 
 	self.browser_menu = Menu:new({
-		title = _("KO ABS"),
+		title = _("AudioBookShelf"),
 		item_table = items,
 	})
 
