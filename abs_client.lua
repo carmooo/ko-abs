@@ -153,7 +153,7 @@ function ABSClient:getLibraryItems(library_id, limit, page)
 end
 
 -- careful what dest_path you call this with as it will mkdir
-function ABSClient:downloadFile(id, dest_dir, dest_filename)
+function ABSClient:downloadFile(id, dest_dir)
 	if not id or id == "" then
 		return _("No item id provided")
 	end
@@ -162,11 +162,7 @@ function ABSClient:downloadFile(id, dest_dir, dest_filename)
 		return _("Invalid destination dir.")
 	end
 
-	if not dest_filename or dest_filename == "" then
-		return _("Invalid destination filename.")
-	end
-
-	local url = "/api/items/" .. id .. "/download"
+	local url = self.server_url .. "/api/items/" .. id .. "/download"
 
 	local headers = {
 		["User-Agent"] = "ko-abs/1.0",
@@ -180,7 +176,7 @@ function ABSClient:downloadFile(id, dest_dir, dest_filename)
 		os.execute(string.format('mkdir -p "%s"', dest_dir))
 	end
 
-	local f, err = io.open(dest_dir .. "/" .. dest_filename, "wb")
+	local f, err = io.open(dest_dir .. "/" .. id, "wb")
 	if err or not f then
 		return _("Cannot open destination file.")
 	end
@@ -197,8 +193,8 @@ function ABSClient:downloadFile(id, dest_dir, dest_filename)
 			redirect = false,
 		})
 	)
-
-	io.close(f)
+	logger.info("ko-abs: HTTP response code:", tostring(code))
+	logger.info("ko-abs: HTTP status:", tostring(status))
 
 	socketutil:reset_timeout()
 

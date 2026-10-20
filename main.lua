@@ -1,5 +1,6 @@
 local _ = require("gettext")
 local ButtonDialog = require("ui/widget/buttondialog")
+local DataStorage = require("datastorage")
 local InfoMessage = require("ui/widget/infomessage")
 local logger = require("logger")
 local Menu = require("ui/widget/menu")
@@ -86,17 +87,14 @@ function KoAbs:renderBrowser()
 	end
 
 	for i, book in ipairs(books.results or {}) do
-		local selected_book = book
-		local metadata = selected_book.media and selected_book.media.metadata or {}
+		local metadata = book.media and book.media.metadata or {}
 		local title = metadata.title or _("Untitled")
 		local author = metadata.authorName or _("Unknown author")
 
 		table.insert(items, {
-			text = title .. "\n" .. _author,
+			text = title .. "\n" .. author,
 			callback = function()
-				UIManager:show(InfoMessage:new({
-					title .. "\n" .. author,
-				}))
+				self:showBookDetails(book)
 			end,
 		})
 	end
@@ -141,6 +139,46 @@ function KoAbs:showLibraryPicker()
 	})
 
 	UIManager:show(dialog)
+end
+
+function KoAbs:showBookDetails(book)
+	local metadata = book.media and book.media.metadata or {}
+	local title = metadata.title or _("Untitled")
+	local author = metadata.authorName or _("Unknown author")
+
+	local dialog = ButtonDialog:new({
+		title = title,
+		buttons = {
+			{
+				{
+					text = _("Download"),
+					callback = function()
+						UIManager:close(dialog)
+						self:downloadBook(book)
+					end,
+				},
+			},
+			{
+				{
+					text = _("Cancel"),
+					callback = function()
+						UIManager:close(dialog)
+					end,
+				},
+			},
+		},
+	})
+
+	UIManager:show(dialog)
+end
+
+function KoAbs:downloadBook(book)
+	local metadata = book.media and book.media.metadata or {}
+	local title = metadata.title or _("Untitled")
+	local author = metadata.authorName or _("Unknown author")
+	local id = book.id
+	local dest_dir = DataStorage:getDataDir() .. "/audiobookshelf/downloads/" .. author
+	self.client:downloadFile(id, dest_dir)
 end
 
 return KoAbs
