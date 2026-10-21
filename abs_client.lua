@@ -240,18 +240,12 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 	local err
 	if open_failed then
 		err = _("Cannot open destination file")
-	end
-
-	if not code then
+	elseif not code then
 		err = _("Network error: no response from server")
-	end
-
 	-- If the request fails, code is a string error message
-	if type(code) ~= "number" then
+	elseif type(code) ~= "number" then
 		err = _("Network error: ") .. tostring(code)
-	end
-
-	if code ~= 200 then
+	elseif code ~= 200 then
 		err = _("Unexpected http response: ") .. tostring(code)
 	end
 
@@ -260,6 +254,7 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 			util.removeFile(path)
 		end
 		logger.warn("ko-abs: download failed", id, err, status)
+		return nil, err
 	end
 
 	logger.info("ko-abs: downloade", id, "to", path)
