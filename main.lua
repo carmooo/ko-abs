@@ -1,12 +1,15 @@
 local _ = require("gettext")
+local ABSClient = require("abs_client")
+local Archiver = require("ffi/archiver")
 local ButtonDialog = require("ui/widget/buttondialog")
 local DataStorage = require("datastorage")
 local InfoMessage = require("ui/widget/infomessage")
-local logger = require("logger")
 local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
-local abs_client = require("abs_client")
+
+local logger = require("logger")
+local util = require("util")
 
 local ok, server_config = pcall(require, "config")
 if not ok then
@@ -34,7 +37,7 @@ end
 
 function KoAbs:showBrowser()
 	local config = { server_url = server_config.server_url }
-	local client = abs_client:new(config)
+	local client = ABSClient:new(config)
 	self.client = client
 
 	local token, user_id, err = client:login(server_config.username, server_config.password)
@@ -174,12 +177,47 @@ end
 
 function KoAbs:downloadBook(book)
 	local metadata = book.media and book.media.metadata or {}
-	local title = metadata.title or _("Untitled")
-	local author = metadata.authorName or _("Unknown author")
+	local base_dir = DataStorage:getDataDir() .. "/audiobookshelf/downloads"
+	local author = util.getSafeFilename(metadata.authorName or _("Unknown author"), base_dir)
+	local dest_dir = base_dir .. "/" .. author
 	local id = book.id
-	local dest_dir = DataStorage:getDataDir() .. "/audiobookshelf/downloads/" .. author
-	local opts = { ["fallback_name"] = title }
-	self.client:downloadItem(id, dest_dir, opts)
+	local path, err = self.client:downloadItem(id, dest_dir)
+	if err then
+		UIManager:show(InfoMessage:new({ text = _("Error downloading item.") }))
+		return
+	end
+
+	-- If it is not a zip we are done
+	if util.getFileNameSuffix(path):lower() ~= "zip" then
+		UIManager:show(InfoMessage:new({ text = _("Saved: ") .. path }))
+		return
+	end
+	-- if it is a zip we unzip into a folder with the same name
+	local dir, filename = util.splitFilePathName(path)
+	local extract_dir = dir .. util.splitFileNameSuffix(filename)
+	local archiver = Archiver.Reader:new()
+	if not archiver:open(path) then
+		logger.error("ko-abs: failed to open zip archive.", archiver.err)
+		archiver:close()
+		UIManager:show(InfoMessage:new({ text = _("Error downloading item.") }))
+		return
+	end
+	for entry in archiver:iterate() do
+		if entry.mode == "file" then
+			local target = extract_dir .. "/" .. entry.path
+			util.makePath((util.splitFilePathName(target)))
+			if not archiver:extractToPath(entry.path, target) then
+				logger.error("ko-abs: failed to extract entry.", archiver.err)
+				archiver:close()
+				UIManager:show(InfoMessage:new({ text = _("Error downloading item.") }))
+				return
+			end
+		end
+	end
+	archiver:close()
+	-- we delete the zip after successful extraction
+	util.removeFile(path)
+	UIManager:show(InfoMessage:new({ text = _("Saved: ") .. extract_dir }))
 end
 
 return KoAbs

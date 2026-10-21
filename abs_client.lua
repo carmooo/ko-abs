@@ -13,10 +13,10 @@ local socket = require("socket")
 local socketutil = require("socketutil")
 local util = require("util")
 
-local function filenameFromHeaders(headers, fallback)
+local function filenameFromHeaders(headers)
 	local disposition = headers and headers["content-disposition"]
 	if not disposition then
-		return fallback
+		return nil
 	end
 
 	-- RFC 5987 + Express
@@ -180,8 +180,6 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 
 	opts = opts or {}
 
-	local fallback_name = opts.fallback_name or id
-
 	local url = self.server_url .. "/api/items/" .. id .. "/download"
 
 	local headers = {
@@ -197,9 +195,9 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 		return nil, _("Cannot create destination directory")
 	end
 
-	local path, file, open_failed
+	local path, file, open_failed, no_filename
 
-	socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_BLOCK_TIMEOUT)
+	socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.DEFAULT_TOTAL_TIMEOUT)
 
 	local code, response_headers, status = socket.skip(
 		1,
@@ -213,7 +211,11 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 					return true, nil
 				end
 
-				local name = util.getSafeFilename(filenameFromHeaders(resp_headers, fallback_name))
+				local name = util.getSafeFilename(filenameFromHeaders(resp_headers), dest_dir)
+				if not name or name == "" then
+					no_filename = true
+					return true
+				end
 				path = dest_dir .. "/" .. name
 
 				file = io.open(path, "wb")
@@ -239,7 +241,9 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 
 	local err
 	if open_failed then
-		err = _("Cannot open destination file")
+		err = _("Cannot open destination file.")
+	elseif no_filename then
+		err = _("Could not get filename from server.")
 	elseif not code then
 		err = _("Network error: no response from server")
 	-- If the request fails, code is a string error message
@@ -253,7 +257,7 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 		if path then
 			util.removeFile(path)
 		end
-		logger.warn("ko-abs: download failed", id, err, status)
+		logger.error("ko-abs: download failed", id, err, status)
 		return nil, err
 	end
 
