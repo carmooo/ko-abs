@@ -2,7 +2,6 @@ local _ = require("gettext")
 local ABSClient = require("abs_client")
 local Archiver = require("ffi/archiver")
 local ButtonDialog = require("ui/widget/buttondialog")
-local DataStorage = require("datastorage")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
 local ProgressbarDialog = require("ui/widget/progressbardialog")
@@ -10,6 +9,7 @@ local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 
 local ffiUtil = require("ffi/util")
+local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local logger = require("logger")
 local util = require("util")
 
@@ -179,7 +179,7 @@ end
 
 function KoAbs:downloadBook(book)
 	local metadata = book.media and book.media.metadata or {}
-	local base_dir = DataStorage:getDataDir() .. "/audiobookshelf/downloads"
+	local base_dir = G_reader_settings:readSetting("download_dir") or filemanagerutil.getDefaultDir()
 	local author = util.getSafeFilename(metadata.authorName or _("Unknown author"), base_dir)
 	local dest_dir = base_dir .. "/" .. author
 	local id = book.id
