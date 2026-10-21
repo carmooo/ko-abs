@@ -11,6 +11,22 @@ local ltn12 = require("ltn12")
 local json = require("json")
 local socket = require("socket")
 local socketutil = require("socketutil")
+local util = require("util")
+
+local function filenameFromHeaders(headers, fallback)
+	local disposition = headers and headers["content-disposition"]
+	if not disposition then
+		return fallback
+	end
+
+	-- RFC 5987 + Express
+	local encoded = disposition:match("filename%*=UTF%-8''([^;]+)")
+	if encoded then
+		return util.urlDecode(encoded)
+	end
+
+	return disposition:match('filename="([^"]+)"') or disposition:match("filename=([^;]+)") or fallback
+end
 
 local ABSClient = {}
 
@@ -153,33 +169,35 @@ function ABSClient:getLibraryItems(library_id, limit, page)
 end
 
 -- careful what dest_path you call this with as it will mkdir
-function ABSClient:downloadFile(id, dest_dir)
+function ABSClient:downloadItem(id, dest_dir, opts)
 	if not id or id == "" then
-		return _("No item id provided")
+		return nil, _("No item id provided")
 	end
 
 	if not dest_dir or dest_dir == "" then
-		return _("Invalid destination dir.")
+		return nil, _("Invalid destination dir.")
 	end
+
+	opts = opts or {}
+
+	local fallback_name = opts.fallback_name or id
 
 	local url = self.server_url .. "/api/items/" .. id .. "/download"
 
 	local headers = {
 		["User-Agent"] = "ko-abs/1.0",
+		["Accept-Encoding"] = "identity",
 	}
 	if self.token and self.token ~= "" then
 		headers["Authorization"] = "Bearer " .. self.token
 	end
 
-	-- careful what you call this with
-	if dest_dir and dest_dir ~= "" then
-		os.execute(string.format('mkdir -p "%s"', dest_dir))
+	util.makePath(dest_dir)
+	if not util.directoryExists(dest_dir) then
+		return nil, _("Cannot create destination directory")
 	end
 
-	local f, err = io.open(dest_dir .. "/" .. id, "wb")
-	if err or not f then
-		return _("Cannot open destination file.")
-	end
+	local path, file, open_failed
 
 	socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_BLOCK_TIMEOUT)
 
@@ -189,8 +207,25 @@ function ABSClient:downloadFile(id, dest_dir)
 			url = url,
 			method = "GET",
 			headers = headers,
-			sink = ltn12.sink.file(f),
 			redirect = false,
+			response_headers = function(response_code, resp_headers)
+				if response_code ~= 200 then
+					return true, nil
+				end
+
+				local name = util.getSafeFilename(filenameFromHeaders(resp_headers, fallback_name))
+				path = dest_dir .. "/" .. name
+
+				file = io.open(path, "wb")
+				if not file then
+					open_failed = true
+					return true
+				end
+
+				local sink = ltn12.sink.file(file)
+
+				return false, sink
+			end,
 		})
 	)
 	logger.info("ko-abs: HTTP response code:", tostring(code))
@@ -198,20 +233,38 @@ function ABSClient:downloadFile(id, dest_dir)
 
 	socketutil:reset_timeout()
 
+	if file and io.type(file) == "file" then
+		file:close()
+	end
+
+	local err
+	if open_failed then
+		err = _("Cannot open destination file")
+	end
+
 	if not code then
-		return _("Network error: no response from server")
+		err = _("Network error: no response from server")
 	end
 
 	-- If the request fails, code is a string error message
 	if type(code) ~= "number" then
-		return _("Network error: ") .. tostring(code)
+		err = _("Network error: ") .. tostring(code)
 	end
 
 	if code ~= 200 then
-		return _("Unexpected http response: ") .. tostring(code)
+		err = _("Unexpected http response: ") .. tostring(code)
 	end
 
-	return nil
+	if err then
+		if path then
+			util.removeFile(path)
+		end
+		logger.warn("ko-abs: download failed", id, err, status)
+	end
+
+	logger.info("ko-abs: downloade", id, "to", path)
+
+	return path
 end
 
 return ABSClient

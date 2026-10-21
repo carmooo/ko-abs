@@ -9,7 +9,6 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local abs_client = require("abs_client")
 
 local ok, server_config = pcall(require, "config")
-
 if not ok then
 	server_config = {}
 end
@@ -146,7 +145,8 @@ function KoAbs:showBookDetails(book)
 	local title = metadata.title or _("Untitled")
 	local author = metadata.authorName or _("Unknown author")
 
-	local dialog = ButtonDialog:new({
+	local dialog
+	dialog = ButtonDialog:new({
 		title = title,
 		buttons = {
 			{
@@ -178,7 +178,8 @@ function KoAbs:downloadBook(book)
 	local author = metadata.authorName or _("Unknown author")
 	local id = book.id
 	local dest_dir = DataStorage:getDataDir() .. "/audiobookshelf/downloads/" .. author
-	self.client:downloadFile(id, dest_dir)
+	local opts = { ["fallback_name"] = title }
+	self.client:downloadItem(id, dest_dir, opts)
 end
 
 return KoAbs
