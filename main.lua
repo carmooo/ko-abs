@@ -8,6 +8,7 @@ local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 
+local ffiUtil = require("ffi/util")
 local logger = require("logger")
 local util = require("util")
 
@@ -189,7 +190,7 @@ function KoAbs:downloadBook(book)
 
 	-- If it is not a zip we are done
 	if util.getFileNameSuffix(path):lower() ~= "zip" then
-		UIManager:show(InfoMessage:new({ text = _("Saved: ") .. path }))
+		UIManager:show(InfoMessage:new({ text = _("Item saved.") }))
 		return
 	end
 	-- if it is a zip we unzip into a folder with the same name
@@ -199,6 +200,7 @@ function KoAbs:downloadBook(book)
 	if not archiver:open(path) then
 		logger.error("ko-abs: failed to open zip archive.", archiver.err)
 		archiver:close()
+		util.removeFile(path)
 		UIManager:show(InfoMessage:new({ text = _("Error downloading item.") }))
 		return
 	end
@@ -209,6 +211,11 @@ function KoAbs:downloadBook(book)
 			if not archiver:extractToPath(entry.path, target) then
 				logger.error("ko-abs: failed to extract entry.", archiver.err)
 				archiver:close()
+				local purged, purge_err = ffiUtil.purgeDir(extract_dir)
+				if not purged then
+					logger.warn("ko-abs: could not purge", extract_dir, purge_err)
+				end
+				util.removeFile(path)
 				UIManager:show(InfoMessage:new({ text = _("Error downloading item.") }))
 				return
 			end
@@ -217,7 +224,7 @@ function KoAbs:downloadBook(book)
 	archiver:close()
 	-- we delete the zip after successful extraction
 	util.removeFile(path)
-	UIManager:show(InfoMessage:new({ text = _("Saved: ") .. extract_dir }))
+	UIManager:show(InfoMessage:new({ text = _("Item saved.") }))
 end
 
 return KoAbs
