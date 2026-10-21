@@ -194,20 +194,19 @@ function KoAbs:downloadBook(book)
 		end
 	end
 
-	local path, err = self.client:downloadItem(id, dest_dir, {
-		-- Zips are chunked, so content-length is absent; they are stored
-		-- uncompressed, making the item size a close enough stand-in.
-		on_start = function(total_bytes, name)
-			progress = ProgressbarDialog:new({
-				title = _("Downloading"),
-				subtitle = name,
-				progress_max = total_bytes or book.size,
-				dismiss_callback = function()
-					progress = nil
-				end,
-			})
-			progress:show()
+	-- The server sends no content-length for zips, so size the bar from the
+	-- item instead; ABS stores its zips uncompressed, making that close enough.
+	progress = ProgressbarDialog:new({
+		title = _("Downloading"),
+		subtitle = metadata.title or _("Untitled"),
+		progress_max = book.size,
+		dismiss_callback = function()
+			progress = nil
 		end,
+	})
+	progress:show()
+
+	local path, err = self.client:downloadItem(id, dest_dir, {
 		progress_callback = function(downloaded_bytes)
 			if progress then
 				progress:reportProgress(downloaded_bytes)

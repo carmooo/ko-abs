@@ -205,9 +205,19 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 		return nil, _("Cannot create destination directory")
 	end
 
-	local path, file, open_failed, no_filename
-
 	socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.DEFAULT_TOTAL_TIMEOUT)
+
+	local tmp_path = dest_dir .. "/" .. id .. ".part"
+
+	local file = io.open(tmp_path, "wb")
+	if not file then
+		return nil, _("Cannot open destination file.")
+	end
+
+	local sink = ltn12.sink.file(file)
+	if opts.progress_callback then
+		sink = socketutil.chainSinkWithProgressCallback(sink, opts.progress_callback)
+	end
 
 	local code, response_headers, status = socket.skip(
 		1,
@@ -215,36 +225,8 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 			url = url,
 			method = "GET",
 			headers = headers,
+			sink = sink,
 			redirect = false,
-			response_headers = function(response_code, resp_headers)
-				if response_code ~= 200 then
-					return true, nil
-				end
-
-				local name = util.getSafeFilename(filenameFromHeaders(resp_headers), dest_dir)
-				if not name or name == "" then
-					no_filename = true
-					return true
-				end
-				path = dest_dir .. "/" .. name
-
-				file = io.open(path, "wb")
-				if not file then
-					open_failed = true
-					return true
-				end
-
-				if opts.on_start then
-					opts.on_start(tonumber(resp_headers["content-length"]), name)
-				end
-
-				local sink = ltn12.sink.file(file)
-				if opts.progress_callback then
-					sink = socketutil.chainSinkWithProgressCallback(sink, opts.progress_callback)
-				end
-
-				return false, sink
-			end,
 		})
 	)
 	logger.info("ko-abs: HTTP response code:", tostring(code))
@@ -257,11 +239,7 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 	end
 
 	local err
-	if open_failed then
-		err = _("Cannot open destination file.")
-	elseif no_filename then
-		err = _("Could not get filename from server.")
-	elseif not code then
+	if not code then
 		err = _("Network error: no response from server")
 	-- If the request fails, code is a string error message
 	elseif type(code) ~= "number" then
@@ -270,15 +248,26 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 		err = _("Unexpected http response: ") .. tostring(code)
 	end
 
+	local name = not err and filenameFromHeaders(response_headers)
+	if not err and not name then
+		err = _("Could not get filename from server.")
+	end
+
 	if err then
-		if path then
-			util.removeFile(path)
-		end
+		util.removeFile(tmp_path)
 		logger.error("ko-abs: download failed", id, err, status)
 		return nil, err
 	end
 
-	logger.info("ko-abs: downloade", id, "to", path)
+	local path = dest_dir .. "/" .. util.getSafeFilename(name, dest_dir)
+	local renamed, rename_err = os.rename(tmp_path, path)
+	if not renamed then
+		util.removeFile(tmp_path)
+		logger.error("ko-abs: rename failed", tmp_path, path, rename_err)
+		return nil, _("Could not save download: ") .. tostring(rename_err)
+	end
+
+	logger.info("ko-abs: downloaded", id, "to", path)
 
 	return path
 end
