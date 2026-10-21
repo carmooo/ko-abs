@@ -5,6 +5,7 @@ local ButtonDialog = require("ui/widget/buttondialog")
 local DataStorage = require("datastorage")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
+local ProgressbarDialog = require("ui/widget/progressbardialog")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 
@@ -182,7 +183,39 @@ function KoAbs:downloadBook(book)
 	local author = util.getSafeFilename(metadata.authorName or _("Unknown author"), base_dir)
 	local dest_dir = base_dir .. "/" .. author
 	local id = book.id
-	local path, err = self.client:downloadItem(id, dest_dir)
+
+	local progress
+
+	local function closeProgress()
+		if progress then
+			progress:close()
+			progress = nil
+		end
+	end
+
+	local path, err = self.client:downloadItem(id, dest_dir, {
+		-- Zips are chunked, so content-length is absent; they are stored
+		-- uncompressed, making the item size a close enough stand-in.
+		on_start = function(total_bytes, name)
+			progress = ProgressbarDialog:new({
+				title = _("Downloading"),
+				subtitle = name,
+				progress_max = total_bytes or book.size,
+				dismiss_callback = function()
+					progress = nil
+				end,
+			})
+			progress:show()
+		end,
+		progress_callback = function(downloaded_bytes)
+			if progress then
+				progress:reportProgress(downloaded_bytes)
+			end
+		end,
+	})
+
+	closeProgress()
+
 	if err then
 		UIManager:show(InfoMessage:new({ text = _("Error downloading item.") }))
 		return

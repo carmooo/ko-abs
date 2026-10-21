@@ -224,7 +224,14 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 					return true
 				end
 
+				if opts.on_start then
+					opts.on_start(tonumber(resp_headers["content-length"]), name)
+				end
+
 				local sink = ltn12.sink.file(file)
+				if opts.progress_callback then
+					sink = socketutil.chainSinkWithProgressCallback(sink, opts.progress_callback)
+				end
 
 				return false, sink
 			end,
