@@ -33,7 +33,7 @@ local ABSClient = {}
 function ABSClient:new(config)
 	config = config or {}
 	setmetatable(config, { __index = self })
-	config.server_url = config.server_url or ""
+	config.server_url = (config.server_url or ""):gsub("/+$", "")
 	config.token = config.token or ""
 	config.user_id = config.user_id or ""
 
@@ -43,6 +43,11 @@ end
 function ABSClient:_request(endpoint, method, body)
 	if not self.server_url or self.server_url == "" then
 		return nil, _("No AudioBookShelf url configured")
+	end
+
+	-- LuaSocket raises rather than erroring on an unknown scheme.
+	if not self.server_url:match("^https?://") then
+		return nil, _("Server url must start with http:// or https://")
 	end
 
 	local url = self.server_url .. endpoint
@@ -176,6 +181,11 @@ function ABSClient:downloadItem(id, dest_dir, opts)
 
 	if not dest_dir or dest_dir == "" then
 		return nil, _("Invalid destination dir.")
+	end
+
+	-- LuaSocket raises rather than erroring on an unknown scheme.
+	if not self.server_url:match("^https?://") then
+		return nil, _("Server url must start with http:// or https://")
 	end
 
 	opts = opts or {}
