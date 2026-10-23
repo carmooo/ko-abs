@@ -25,7 +25,7 @@ local function filenameFromHeaders(headers)
 		return util.urlDecode(encoded)
 	end
 
-	return disposition:match('filename="([^"]+)"') or disposition:match("filename=([^;]+)") or fallback
+	return disposition:match('filename="([^"]+)"') or disposition:match("filename=([^;]+)")
 end
 
 local ABSClient = {}

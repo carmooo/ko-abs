@@ -82,7 +82,7 @@ function KoAbs:renderBrowser()
 		end,
 	})
 
-	local books, err = self.client:getLibraryItems(self.selected_library.id)
+	local books, err = self.client:getLibraryItems(self.selected_library.id, 0)
 	if err then
 		UIManager:show(InfoMessage:new({
 			text = _("Error getting library items: ") .. err,
@@ -179,8 +179,7 @@ end
 
 function KoAbs:downloadBook(book)
 	local metadata = book.media and book.media.metadata or {}
-	local base_dir = (G_reader_settings:readSetting("download_dir") or filemanagerutil.getDefaultDir())
-		.. "/books"
+	local base_dir = (G_reader_settings:readSetting("download_dir") or filemanagerutil.getDefaultDir()) .. "/books"
 	local author = util.getSafeFilename(metadata.authorName or _("Unknown author"), base_dir)
 	local dest_dir = base_dir .. "/" .. author
 	local id = book.id
